@@ -1,16 +1,19 @@
-dolag/httpdispatch.svg?branch=master)](https://travis-ci.org/dolab/httpdispatch) [![Coverage](http://gocover.io/_badge/github.com/dolab/httpdispatch?0)](http://gocover.io/github.com/dolab/httpdispatch) [![GoDoc](https://godoc.org/github.com/dolab/httpdispatch?status.svg)](http://godoc.org/github.com/dolab/httpdispatch)
+# httpdispatch
 
-`httpdispatch` is a lightweight high performance HTTP request dispatcher (also called *multiplexer* or just *mux* for short) for [Golang](https://golang.org/), which heavily inspired from [httprouter](https://github.com/julienschmidt/httprouter).
+[![Build Status](https://travis-ci.org/dolab/httpdispatch.svg?branch=master)](https://travis-ci.org/dolab/httpdispatch) [![Coverage](http://gocover.io/_badge/github.com/dolab/httpdispatch?0)](http://gocover.io/github.com/dolab/httpdispatch) [![GoDoc](https://godoc.org/github.com/dolab/httpdispatch?status.svg)](http://godoc.org/github.com/dolab/httpdispatch)
 
-In contrast to the [default mux][http.ServeMux] of Go's `net/http` package, this dispatcher supports variables in the routing pattern and matches against the request method. It also scales more.
+`httpdispatch` is a lightweight high performance HTTP request dispatcher (also called *multiplexer* or *mux* for short) for [Golang](https://golang.org/), which heavily inspired from [httprouter](https://github.com/julienschmidt/httprouter).
+
+In contrast to the [default mux][http.ServeMux] of Go's `net/http` package, the dispatcher supports variables in the routing pattern and matches against the request method. It also scales more.
 
 The dispatcher is optimized for high performance and a small memory footprint. It scales well even with very long paths and a large number of routes. A compressing dynamic trie (radix tree) structure is used for efficient matching.
+
 
 ## Features
 
 **Only explicit matches:** With other routers, like [`http.ServeMux`][http.ServeMux], a requested URL path could match multiple patterns. Therefore they have some awkward pattern priority rules, like *longest match* or *first registered, first matched*. By design of this router, a request can only match exactly one or no route. As a result, there are also no unintended matches, which makes it great for SEO and improves the user experience.
 
-**Stop caring about trailing slashes:** Choose the URL style you like, the router automatically redirects the client if a trailing slash is missing or if there is one extra. Of course it only does so, if the new path has a handler. If you don't like it, you can [turn off this behavior](https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.RedirectTrailingSlash).
+**Stop caring about trailing slashes:** Choose the URL style you like, the router automatically redirects the client if a trailing slash is missing or if there is one extra. Of course it only does so, if the new path has a handler. If you don't like it, you can [turn off RedirectTrailingSlash](https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.RedirectTrailingSlash) and it will return registed handler straightly.
 
 **Path auto-correction:** Besides detecting the missing or additional trailing slash at no extra cost, the router can also fix wrong cases and remove superfluous path elements (like `../` or `//`). Is [CAPTAIN CAPS LOCK](http://www.urbandictionary.com/define.php?term=Captain+Caps+Lock) one of your users? `httpdispatch` can help him by making a case-insensitive look-up and redirecting him to the correct URL.
 
@@ -18,11 +21,11 @@ The dispatcher is optimized for high performance and a small memory footprint. I
 
 **Zero Garbage:** The matching and dispatching process generates zero bytes of garbage. In fact, the only heap allocations that are made, is by building the slice of the key-value pairs for path parameters. If the request path contains no parameters, not a single heap allocation is necessary.
 
-**No more server crashes:** You can set a [Panic handler][Dispatcher.PanicHandler] to deal with panics occurring during handling a HTTP request. The router then recovers and lets the `PanicHandler` log what happened and deliver a nice error page.
+**No more server crashes:** You can set a [Panic handler][Dispatcher.PanicHandler] to deal with panics occurring during handling a HTTP request. The router then recovers and lets the `PanicHandler` log what happened and deliver a error response for human.
 
 **Perfect for APIs:** The router design encourages to build sensible, hierarchical RESTful APIs. Moreover it has builtin native support for [OPTIONS requests](http://zacstewart.com/2012/04/14/http-options-method.html) and `405 Method Not Allowed` replies.
 
-Of course you can also set **custom [`NotFound`][Dispatcher.NotFound] and  [`MethodNotAllowed`](https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.MethodNotAllowed) handlers** and [**serve static files**][Dispatcher.ServeFiles].
+Of course you can also set **custom [`NotFound`][Dispatcher.NotFound] and  [`MethodNotAllowed`][Dispatcher.MethodNotAllowed] handlers** and [**serve static files**][Dispatcher.ServeFiles].
 
 ## Usage
 
@@ -34,29 +37,35 @@ Let's start with a trivial example:
 package main
 
 import (
-    "fmt"
-    "net/http"
+	"fmt"
 	"log"
+	"net/http"
 
-    "github.com/dolab/httpdispatch"
+	"github.com/dolab/httpdispatch"
 )
 
 func Index(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprint(w, "Welcome!\n")
+	fmt.Fprint(w, "Welcome!\n")
 }
 
 func Hello(w http.ResponseWriter, r *http.Request) {
 	params := httpdispatch.ContextParams(r)
 
-    fmt.Fprintf(w, "hello, %s!\n", params.ByName("name"))
+	fmt.Fprintf(w, "Hello, %s!\n", params.ByName("name"))
+}
+
+// for high performance
+func PerfPingPong(w http.ResponseWriter, r *http.Request, params httpdispatch.Params) {
+	fmt.Fprintf(w, "Pong, %s!\n", params.ByName("pong"))
 }
 
 func main() {
-    router := httpdispatch.New()
-    router.GET("/", Index)
-    router.GET("/hello/:name", Hello)
+	router := httpdispatch.New()
+	router.GET("/", Index)
+	router.GET("/hello/:name", Hello)
+	router.GET("/ping/:pong", PerfPingPong)
 
-    log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
 ```
 
@@ -295,5 +304,6 @@ If the httpdispatcher is a bit too minimalistic for you, you might try one of th
 [Dispatcher.HandlerFunc]: <https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.HandlerFunc>
 [Dispatcher.HandleMethodNotAllowed]: <https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.HandleMethodNotAllowed>
 [Dispatcher.NotFound]: <https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.NotFound>
+[Dispatcher.MethodNotAllowed]: <https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.MethodNotAllowed>
 [Dispatcher.PanicHandler]: <https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.PanicHandler>
 [Dispatcher.ServeFiles]: <https://godoc.org/github.com/dolab/httpdispatch#Dispatcher.ServeFiles>
