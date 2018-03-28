@@ -37,17 +37,12 @@ func ContextParams(r *http.Request) Params {
 	return params
 }
 
-// Handler is an adapter which allows the usage of a http.Handler as a
-// request handle.
-func (r *Dispatcher) Handler(method, path string, handler http.Handler) {
-	r.Handle(method, path,
-		func(w http.ResponseWriter, req *http.Request, ps Params) {
-			buf := bytes.NewBuffer(nil)
-			if err := gob.NewEncoder(buf).Encode(ps); err == nil {
-				req.Header.Add(ctxParamHeaderKey, base64.RawURLEncoding.EncodeToString(buf.Bytes()))
-			}
+// Handle hijacks http.Handler with request params
+func (ch *ContextHandle) Handle(w http.ResponseWriter, r *http.Request, ps Params) {
+	buf := bytes.NewBuffer(nil)
+	if err := gob.NewEncoder(buf).Encode(ps); err == nil {
+		req.Header.Add(ctxParamHeaderKey, base64.RawURLEncoding.EncodeToString(buf.Bytes()))
+	}
 
-			handler.ServeHTTP(w, req)
-		},
-	)
+	ch.handler.ServeHTTP(w, r)
 }

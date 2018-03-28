@@ -37,18 +37,18 @@ const (
 	static nodeType = iota // default
 	root
 	param
-	catchAll
+	wildcard
 )
 
 type node struct {
-	path      string
-	wildChild bool
-	nType     nodeType
-	maxParams uint8
-	indices   string
-	children  []*node
-	handle    Handle
-	priority  uint32
+	typo     nodeType
+	path     string
+	nparams  uint8
+	indices  string
+	handle   Handler
+	priority uint32
+	children []*node
+	wildcard bool
 }
 
 // increments priority of the given child and reorders if necessary
@@ -77,9 +77,9 @@ func (n *node) incrementChildPrio(pos int) int {
 	return newPos
 }
 
-// addRoute adds a node with the given handle to the path.
+// add adds a node with the given handle to the path.
 // Not concurrency-safe!
-func (n *node) addRoute(path string, handle Handle) {
+func (n *node) add(path string, handle Handler) {
 	fullPath := path
 	n.priority++
 	numParams := countParams(path)
@@ -88,9 +88,9 @@ func (n *node) addRoute(path string, handle Handle) {
 	if len(n.path) > 0 || len(n.children) > 0 {
 	walk:
 		for {
-			// Update maxParams of the current node
-			if numParams > n.maxParams {
-				n.maxParams = numParams
+			// Update nparams of the current node
+			if numParams > n.nparams {
+				n.nparams = numParams
 			}
 
 			// Find the longest common prefix.
@@ -105,19 +105,19 @@ func (n *node) addRoute(path string, handle Handle) {
 			// Split edge
 			if i < len(n.path) {
 				child := node{
-					path:      n.path[i:],
-					wildChild: n.wildChild,
-					nType:     static,
-					indices:   n.indices,
-					children:  n.children,
-					handle:    n.handle,
-					priority:  n.priority - 1,
+					path:     n.path[i:],
+					wildcard: n.wildcard,
+					typo:     static,
+					indices:  n.indices,
+					children: n.children,
+					handle:   n.handle,
+					priority: n.priority - 1,
 				}
 
-				// Update maxParams (max of all children)
+				// Update nparams (max of all children)
 				for i := range child.children {
-					if child.children[i].maxParams > child.maxParams {
-						child.maxParams = child.children[i].maxParams
+					if child.children[i].nparams > child.nparams {
+						child.nparams = child.children[i].nparams
 					}
 				}
 
@@ -126,20 +126,20 @@ func (n *node) addRoute(path string, handle Handle) {
 				n.indices = string([]byte{n.path[i]})
 				n.path = path[:i]
 				n.handle = nil
-				n.wildChild = false
+				n.wildcard = false
 			}
 
 			// Make new node a child of this node
 			if i < len(path) {
 				path = path[i:]
 
-				if n.wildChild {
+				if n.wildcard {
 					n = n.children[0]
 					n.priority++
 
-					// Update maxParams of the child node
-					if numParams > n.maxParams {
-						n.maxParams = numParams
+					// Update nparams of the child node
+					if numParams > n.nparams {
+						n.nparams = numParams
 					}
 					numParams--
 
@@ -159,7 +159,7 @@ func (n *node) addRoute(path string, handle Handle) {
 				c := path[0]
 
 				// slash after param
-				if n.nType == param && c == '/' && len(n.children) == 1 {
+				if n.typo == param && c == '/' && len(n.children) == 1 {
 					n = n.children[0]
 					n.priority++
 					continue walk
@@ -179,7 +179,7 @@ func (n *node) addRoute(path string, handle Handle) {
 					// []byte for proper unicode char conversion, see #65
 					n.indices += string([]byte{c})
 					child := &node{
-						maxParams: numParams,
+						nparams: numParams,
 					}
 					n.children = append(n.children, child)
 					n.incrementChildPrio(len(n.indices) - 1)
@@ -198,11 +198,11 @@ func (n *node) addRoute(path string, handle Handle) {
 		}
 	} else { // Empty tree
 		n.insertChild(numParams, path, fullPath, handle)
-		n.nType = root
+		n.typo = root
 	}
 }
 
-func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle) {
+func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handler) {
 	var offset int // already handled bytes of the path
 
 	// find prefix until first wildcard (beginning with ':'' or '*'')
@@ -245,11 +245,11 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 			}
 
 			child := &node{
-				nType:     param,
-				maxParams: numParams,
+				typo:    param,
+				nparams: numParams,
 			}
 			n.children = []*node{child}
-			n.wildChild = true
+			n.wildcard = true
 			n = child
 			n.priority++
 			numParams--
@@ -261,14 +261,14 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 				offset = end
 
 				child := &node{
-					maxParams: numParams,
-					priority:  1,
+					nparams:  numParams,
+					priority: 1,
 				}
 				n.children = []*node{child}
 				n = child
 			}
 
-		} else { // catchAll
+		} else { // wildcard
 			if end != max || numParams > 1 {
 				panic("catch-all routes are only allowed at the end of the path in path '" + fullPath + "'")
 			}
@@ -285,11 +285,11 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 
 			n.path = path[offset:i]
 
-			// first node: catchAll node with empty path
+			// first node: wildcard node with empty path
 			child := &node{
-				wildChild: true,
-				nType:     catchAll,
-				maxParams: 1,
+				wildcard: true,
+				typo:     wildcard,
+				nparams:  1,
 			}
 			n.children = []*node{child}
 			n.indices = string(path[i])
@@ -298,11 +298,11 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 
 			// second node: node holding the variable
 			child = &node{
-				path:      path[i:],
-				nType:     catchAll,
-				maxParams: 1,
-				handle:    handle,
-				priority:  1,
+				path:     path[i:],
+				typo:     wildcard,
+				nparams:  1,
+				handle:   handle,
+				priority: 1,
 			}
 			n.children = []*node{child}
 
@@ -321,7 +321,7 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 // made if a handle exists with an extra (without the) trailing slash for the
 // given path.
 // It returns handle also if a TSR is true. Its useful for quick fallback strategy.
-func (n *node) getValue(path string) (handle Handle, p Params, tsr bool) {
+func (n *node) getValue(path string) (handle Handler, p Params, tsr bool) {
 walk: // outer loop for walking the tree
 	for {
 		switch {
@@ -329,10 +329,10 @@ walk: // outer loop for walking the tree
 			if path[:len(n.path)] == n.path {
 				path = path[len(n.path):]
 
-				// If this node does not have a wildcard (param or catchAll)
+				// If this node does not have a wildcard (param or wildcard)
 				// child,  we can just look up the next child node and continue
 				// to walk down the tree
-				if !n.wildChild {
+				if !n.wildcard {
 					// could we stop swift for path such as /name/
 					tsr = (path == "/" && n.handle != nil)
 					if tsr {
@@ -354,12 +354,12 @@ walk: // outer loop for walking the tree
 
 				// handle wildcard child
 				n = n.children[0]
-				switch n.nType {
+				switch n.typo {
 				case param:
 					// save param value
 					if p == nil {
 						// lazy allocation
-						p = make(Params, 0, n.maxParams)
+						p = make(Params, 0, n.nparams)
 					}
 
 					// find param end (either '/' or path end)
@@ -413,11 +413,11 @@ walk: // outer loop for walking the tree
 
 					return
 
-				case catchAll:
+				case wildcard:
 					// save param value
 					if p == nil {
 						// lazy allocation
-						p = make(Params, 0, n.maxParams)
+						p = make(Params, 0, n.nparams)
 					}
 
 					i := len(p)
@@ -445,7 +445,7 @@ walk: // outer loop for walking the tree
 			}
 
 			// redirect /name/ to /name
-			if path == "/" && n.wildChild && n.nType != root {
+			if path == "/" && n.wildcard && n.typo != root {
 				tsr = true
 
 				return
@@ -464,7 +464,7 @@ walk: // outer loop for walking the tree
 						return
 					}
 
-					tsr = (n.nType == catchAll && n.children[0].handle != nil)
+					tsr = (n.typo == wildcard && n.children[0].handle != nil)
 					if tsr {
 						handle = n.children[0].handle
 					}
@@ -538,10 +538,10 @@ walk: // outer loop for walking the tree
 			loOld := loPath
 			loPath = loPath[len(loNPath):]
 
-			// If this node does not have a wildcard (param or catchAll) child,
+			// If this node does not have a wildcard (param or wildcard) child,
 			// we can just look up the next child node and continue to walk down
 			// the tree
-			if !n.wildChild {
+			if !n.wildcard {
 				// skip rune bytes already processed
 				rb = shiftNRuneBytes(rb, len(loNPath))
 
@@ -614,7 +614,7 @@ walk: // outer loop for walking the tree
 			}
 
 			n = n.children[0]
-			switch n.nType {
+			switch n.typo {
 			case param:
 				// find param end (either '/' or path end)
 				k := 0
@@ -655,7 +655,7 @@ walk: // outer loop for walking the tree
 				}
 				return ciPath, false
 
-			case catchAll:
+			case wildcard:
 				return append(ciPath, path...), true
 
 			default:
@@ -675,7 +675,7 @@ walk: // outer loop for walking the tree
 					if n.indices[i] == '/' {
 						n = n.children[i]
 						if (len(n.path) == 1 && n.handle != nil) ||
-							(n.nType == catchAll && n.children[0].handle != nil) {
+							(n.typo == wildcard && n.children[0].handle != nil) {
 							return append(ciPath, '/'), true
 						}
 						return ciPath, false

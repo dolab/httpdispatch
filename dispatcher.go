@@ -28,8 +28,8 @@
 //
 //  func main() {
 //      router := httpdispatch.New()
-//      router.GET("/", Index)
-//      router.GET("/hello/:name", Hello)
+//      router.GET("/", http.HandlerFunc(Index))
+//      router.GET("/hello/:name", http.HandlerFunc(Hello))
 //
 //      log.Fatal(http.ListenAndServe(":8080", router))
 //  }
@@ -83,10 +83,12 @@ import (
 	"net/http"
 )
 
-// Handle is a function that can be registered to a route to handle HTTP
+// Handler is an interface that can be registered to a route to handle HTTP
 // requests. Like http.HandlerFunc, but has a third parameter for the values of
 // wildcards (variables).
-type Handle func(http.ResponseWriter, *http.Request, Params)
+type Handler interface {
+	Handle(http.ResponseWriter, *http.Request, Params)
+}
 
 // Dispatcher is a http.Handler which can be used to dispatch requests to different
 // handler functions via configurable routes
@@ -157,44 +159,50 @@ func New() *Dispatcher {
 }
 
 // OPTIONS is a shortcut for dispatcher.Handler("GET", path, http.Handler)
-func (r *Dispatcher) OPTIONS(path string, handler http.Handler) {
-	r.Handler(http.MethodOptions, path, handler)
+func (d *Dispatcher) OPTIONS(path string, handler http.Handler) {
+	d.Handler(http.MethodOptions, path, handler)
 }
 
 // GET is a shortcut for dispatcher.Handler("GET", path, http.Handler)
-func (r *Dispatcher) GET(path string, handler http.Handler) {
-	r.Handler(http.MethodGet, path, handler)
+func (d *Dispatcher) GET(path string, handler http.Handler) {
+	d.Handler(http.MethodGet, path, handler)
 }
 
 // HEAD is a shortcut for dispatcher.Handler("GET", path, http.Handler)
-func (r *Dispatcher) HEAD(path string, handler http.Handler) {
-	r.Handler(http.MethodHead, path, handler)
+func (d *Dispatcher) HEAD(path string, handler http.Handler) {
+	d.Handler(http.MethodHead, path, handler)
 }
 
 // POST is a shortcut for dispatcher.Handler("GET", path, http.Handler)
-func (r *Dispatcher) POST(path string, handler http.Handler) {
-	r.Handler(http.MethodPost, path, handler)
+func (d *Dispatcher) POST(path string, handler http.Handler) {
+	d.Handler(http.MethodPost, path, handler)
 }
 
 // PUT is a shortcut for dispatcher.Handler("GET", path, http.Handler)
-func (r *Dispatcher) PUT(path string, handler http.Handler) {
-	r.Handler(http.MethodPut, path, handler)
+func (d *Dispatcher) PUT(path string, handler http.Handler) {
+	d.Handler(http.MethodPut, path, handler)
 }
 
 // PATCH is a shortcut for dispatcher.Handler("GET", path, http.Handler)
-func (r *Dispatcher) PATCH(path string, handler http.Handler) {
-	r.Handler(http.MethodPatch, path, handler)
+func (d *Dispatcher) PATCH(path string, handler http.Handler) {
+	d.Handler(http.MethodPatch, path, handler)
 }
 
 // DELETE is a shortcut for dispatcher.Handler("GET", path, http.Handler)
-func (r *Dispatcher) DELETE(path string, handler http.Handler) {
-	r.Handler(http.MethodDelete, path, handler)
+func (d *Dispatcher) DELETE(path string, handler http.Handler) {
+	d.Handler(http.MethodDelete, path, handler)
+}
+
+// Handler is an adapter which allows the usage of a http.Handler as a
+// request handle.
+func (d *Dispatcher) Handler(method, path string, handler http.Handler) {
+	d.Handle(method, path, NewContextHandle(handler))
 }
 
 // HandlerFunc is an adapter which allows the usage of an http.HandlerFunc as a
 // request handler.
-func (r *Dispatcher) HandlerFunc(method, path string, handler http.HandlerFunc) {
-	r.Handler(method, path, handler)
+func (d *Dispatcher) HandlerFunc(method, path string, handler http.HandlerFunc) {
+	d.Handler(method, path, handler)
 }
 
 // ServeFiles serves files from the given file system root.
@@ -207,18 +215,12 @@ func (r *Dispatcher) HandlerFunc(method, path string, handler http.HandlerFunc) 
 // To use the operating system's file system implementation,
 // use http.Dir:
 //     router.ServeFiles("/static/*filepath", http.Dir("/var/www"))
-func (r *Dispatcher) ServeFiles(path string, fs http.FileSystem) {
+func (d *Dispatcher) ServeFiles(path string, fs http.FileSystem) {
 	if len(path) < 10 || path[len(path)-10:] != "/*filepath" {
-		panic("path must end with /*filepath in '" + path + "'")
+		panic(`static files server path must end with /*filepath in "` + path + `"`)
 	}
 
-	fileServer := http.FileServer(fs)
-
-	r.Handle(http.MethodGet, path, func(w http.ResponseWriter, req *http.Request, ps Params) {
-		req.URL.Path = ps.ByName("filepath")
-
-		fileServer.ServeHTTP(w, req)
-	})
+	d.Handle(http.MethodGet, path, NewFileHandle(fs))
 }
 
 // Lookup allows the manual lookup of a method + path combo.
@@ -228,8 +230,8 @@ func (r *Dispatcher) ServeFiles(path string, fs http.FileSystem) {
 //
 // NOTE: It returns handler when the third returned value indicates a redirection to
 // the same path with / without the trailing slash should be performed.
-func (r *Dispatcher) Lookup(method, path string) (Handle, Params, bool) {
-	if root := r.trees[method]; root != nil {
+func (d *Dispatcher) Lookup(method, path string) (Handler, Params, bool) {
+	if root := d.trees[method]; root != nil {
 		return root.getValue(path)
 	}
 
@@ -237,19 +239,19 @@ func (r *Dispatcher) Lookup(method, path string) (Handle, Params, bool) {
 }
 
 // ServeHTTP makes the router implement the http.Handler interface.
-func (r *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if r.PanicHandler != nil {
-		defer r.recovery(w, req)
+func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if d.PanicHandler != nil {
+		defer d.recovery(w, req)
 	}
 
 	path := req.URL.Path
 
-	if root := r.trees[req.Method]; root != nil {
+	if root := d.trees[req.Method]; root != nil {
 		handler, params, tsr := root.getValue(path)
 
 		if handler != nil {
-			if !tsr || !r.RedirectTrailingSlash {
-				handler(w, req, params)
+			if !tsr || !d.RedirectTrailingSlash {
+				handler.Handle(w, req, params)
 				return
 			}
 
@@ -273,10 +275,10 @@ func (r *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 
 		// Try to fix the request path
-		if r.RedirectFixedPath && req.Method != http.MethodConnect && path != "/" {
+		if d.RedirectFixedPath && req.Method != http.MethodConnect && path != "/" {
 			fixedPath, found := root.findCaseInsensitivePath(
 				Normalize(path),
-				r.RedirectTrailingSlash,
+				d.RedirectTrailingSlash,
 			)
 			if found {
 				// Permanent redirect, request with GET method
@@ -297,8 +299,8 @@ func (r *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if req.Method == http.MethodOptions {
 		// Handle OPTIONS
-		if r.HandleMethodOPTIONS {
-			allow := r.allowed(path, req.Method)
+		if d.HandleMethodOPTIONS {
+			allow := d.allowed(path, req.Method)
 			if len(allow) > 0 {
 				w.Header().Set("Allow", allow)
 				return
@@ -306,13 +308,13 @@ func (r *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	} else {
 		// Handle 405
-		if r.HandleMethodNotAllowed {
-			allow := r.allowed(path, req.Method)
+		if d.HandleMethodNotAllowed {
+			allow := d.allowed(path, req.Method)
 			if len(allow) > 0 {
 				w.Header().Set("Allow", allow)
 
-				if r.MethodNotAllowed != nil {
-					r.MethodNotAllowed.ServeHTTP(w, req)
+				if d.MethodNotAllowed != nil {
+					d.MethodNotAllowed.ServeHTTP(w, req)
 				} else {
 					http.Error(w,
 						http.StatusText(http.StatusMethodNotAllowed),
@@ -325,7 +327,7 @@ func (r *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Handle 404
-	r.notfound(w, req)
+	d.notfound(w, req)
 }
 
 // Handle registers a new request handler with the given path and method.
@@ -337,28 +339,28 @@ func (r *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 // This func is intended for bulk loading and to allow the usage of less
 // frequently used, non-standardized or custom methods (e.g. for internal
 // communication with a proxy).
-func (r *Dispatcher) Handle(method, path string, handle Handle) {
+func (d *Dispatcher) Handle(method, path string, handler Handler) {
 	if path[0] != '/' {
 		panic("path must begin with '/' in '" + path + "'")
 	}
 
-	if r.trees == nil {
-		r.trees = make(map[string]*node)
+	if d.trees == nil {
+		d.trees = make(map[string]*node)
 	}
 
-	root := r.trees[method]
+	root := d.trees[method]
 	if root == nil {
 		root = new(node)
 
-		r.trees[method] = root
+		d.trees[method] = root
 	}
 
-	root.addRoute(path, handle)
+	root.add(path, handler)
 }
 
-func (r *Dispatcher) allowed(path, reqMethod string) (allow string) {
+func (d *Dispatcher) allowed(path, reqMethod string) (allow string) {
 	if path == "*" { // server-wide
-		for method := range r.trees {
+		for method := range d.trees {
 			if method == http.MethodOptions {
 				continue
 			}
@@ -371,13 +373,13 @@ func (r *Dispatcher) allowed(path, reqMethod string) (allow string) {
 			}
 		}
 	} else { // specific path
-		for method := range r.trees {
+		for method := range d.trees {
 			// Skip the requested method - we already tried this one
 			if method == reqMethod || method == http.MethodOptions {
 				continue
 			}
 
-			handler, _, _ := r.trees[method].getValue(path)
+			handler, _, _ := d.trees[method].getValue(path)
 			if handler != nil {
 				// add request method to list of allowed methods
 				if len(allow) == 0 {
@@ -396,16 +398,16 @@ func (r *Dispatcher) allowed(path, reqMethod string) (allow string) {
 	return
 }
 
-func (r *Dispatcher) notfound(w http.ResponseWriter, req *http.Request) {
-	if r.NotFound != nil {
-		r.NotFound.ServeHTTP(w, req)
+func (d *Dispatcher) notfound(w http.ResponseWriter, req *http.Request) {
+	if d.NotFound != nil {
+		d.NotFound.ServeHTTP(w, req)
 	} else {
 		http.NotFound(w, req)
 	}
 }
 
-func (r *Dispatcher) recovery(w http.ResponseWriter, req *http.Request) {
+func (d *Dispatcher) recovery(w http.ResponseWriter, req *http.Request) {
 	if rcv := recover(); rcv != nil {
-		r.PanicHandler(w, req, rcv)
+		d.PanicHandler(w, req, rcv)
 	}
 }
