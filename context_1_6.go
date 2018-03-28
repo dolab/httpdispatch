@@ -41,7 +41,7 @@ func ContextParams(r *http.Request) Params {
 func (ch *ContextHandle) Handle(w http.ResponseWriter, r *http.Request, ps Params) {
 	buf := bytes.NewBuffer(nil)
 	if err := gob.NewEncoder(buf).Encode(ps); err == nil {
-		req.Header.Add(ctxParamHeaderKey, base64.RawURLEncoding.EncodeToString(buf.Bytes()))
+		r.Header.Add(ctxParamHeaderKey, base64.RawURLEncoding.EncodeToString(buf.Bytes()))
 	}
 
 	ch.handler.ServeHTTP(w, r)
