@@ -21,9 +21,9 @@ The dispatcher is optimized for high performance and a small memory footprint. I
 
 **Zero Garbage:** The matching and dispatching process generates zero bytes of garbage. In fact, the only heap allocations that are made, is by building the slice of the key-value pairs for path parameters. If the request path contains no parameters, not a single heap allocation is necessary.
 
-**No more server crashes:** You can set a [Panic handler][Dispatcher.PanicHandler] to deal with panics occurring during handling a HTTP request. The router then recovers and lets the `PanicHandler` log what happened and deliver a error response for human.
+**No more server crashes:** You can set a [Panic Handler][Dispatcher.PanicHandler] to deal with panics occurring during handling a HTTP request. The router then recovers and lets the `PanicHandler` log what happened and deliver an error response for human.
 
-**Perfect for APIs:** The router design encourages to build sensible, hierarchical RESTful APIs. Moreover it has builtin native support for [OPTIONS requests](http://zacstewart.com/2012/04/14/http-options-method.html) and `405 Method Not Allowed` replies.
+**Perfect for APIs:** The router design encourages to build sensible, hierarchical RESTful APIs. Moreover it has builtin native support for [OPTIONS Requests](http://zacstewart.com/2012/04/14/http-options-method.html) and `405 Method Not Allowed` replies.
 
 Of course you can also set **custom [`NotFound`][Dispatcher.NotFound] and  [`MethodNotAllowed`][Dispatcher.MethodNotAllowed] handlers** and [**serve static files**][Dispatcher.ServeFiles].
 
@@ -55,15 +55,17 @@ func Hello(w http.ResponseWriter, r *http.Request) {
 }
 
 // for high performance
-func PerfPingPong(w http.ResponseWriter, r *http.Request, params httpdispatch.Params) {
+type PingPong struct{}
+
+func (pp PingPong) Handle(w http.ResponseWriter, r *http.Request, params httpdispatch.Params) {
 	fmt.Fprintf(w, "Pong, %s!\n", params.ByName("pong"))
 }
 
 func main() {
 	router := httpdispatch.New()
-	router.GET("/", Index)
-	router.GET("/hello/:name", Hello)
-	router.GET("/ping/:pong", PerfPingPong)
+	router.GET("/", http.HandlerFunc(Index))
+	router.GET("/hello/:name", http.HandlerFunc(Hello))
+	router.Handle(http.MethodGet, "/ping/:pong", PingPong{})
 
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -88,7 +90,7 @@ Pattern: /user/:user
 
 ### URL wildcard parameters
 
-The second type are *catch-all* parameters and have the form `*name`. Like the name suggests, they match everything. Therefore they must always be at the **end** of the pattern:
+The second type are *wildcard* (catch-all) parameters and have the form `*name`. Like the name suggests, they match everything. Therefore they must always be at the **end** of the pattern:
 
 ```
 Pattern: /static/*filepath
@@ -116,7 +118,7 @@ Priority   Path             Handle
 1          └contact\        *<8>
 ```
 
-Every `*<num>` represents the memory address of a handler function (a pointer). If you follow a path trough the tree from the root to the leaf, you get the complete route path, e.g `\blog\:post\`, where `:post` is just a placeholder ([*parameter*](#url-named-parameters)) for an actual post name. Unlike hash-maps, a tree structure also allows us to use dynamic parts like the `:post` parameter, since we actually match against the routing patterns instead of just comparing hashes. This works very well and efficient.
+Every `*<num>` represents the memory address of a handler function (a pointer). If you follow a path through the tree from the root to the leaf, you get the complete route path, e.g `\blog\:post\`, where `:post` is just a placeholder ([*parameter*](#url-named-parameters)) for an actual post name. Unlike hash-maps, a tree structure also allows us to use dynamic parts like the `:post` parameter, since we actually match against the routing patterns instead of just comparing hashes. This works very well and efficient.
 
 Since URL paths have a hierarchical structure and make use only of a limited set of characters (byte values), it is very likely that there are a lot of common prefixes. This allows us to easily reduce the routing into ever smaller problems. Moreover the router manages a separate tree for every request method. For one thing it is more space efficient than holding a method->handle map in every single node, for another thing is also allows us to greatly reduce the routing problem before even starting the look-up in the prefix-tree.
 
@@ -126,19 +128,9 @@ For even better scalability, the child nodes on each tree level are ordered by p
 
 2. It is some sort of cost compensation. The longest reachable path (highest cost) can always be evaluated first. The following scheme visualizes the tree structure. Nodes are evaluated from top to bottom and from left to right.
 
-```
-├------------
-├---------
-├-----
-├----
-├--
-├--
-└-
-```
-
 ## Does this work with `http.Handler`?
 
-**It does!** The router itself implements the `http.Handler` interface. Moreover the router provides convenient [adapters for `http.Handler`][Dispatcher.Handler]s and [`http.HandlerFunc`][Dispatcher.HandlerFunc]s which allows them to be used as a [`httpdispatch.Handle`][Dispatcher.Handle] when registering a route. The only different is, that parameter values should be retrieved using [`httpdispatch.ContextParams`] when a `http.Handler` or `http.HandlerFunc` is used. Therefore [`httpdispatch.Handle`][Dispatcher.Handle] has a third function parameter for performance.
+**It does!** The router itself implements the `http.Handler` interface. Moreover the router provides convenient [adapters for `http.Handler`][Dispatcher.Handler]s and [`http.HandlerFunc`][Dispatcher.HandlerFunc]s which allows them to be used as a [`httpdispatch.Handle`][Dispatcher.Handle] when registering a route. The only different is, that parameter values should be retrieved using [`httpdispatch.ContextParams`] when a `http.Handler` or `http.HandlerFunc` is used. Therefore [`httpdispatch.Handle`][Dispatcher.Handle] has a third func parameter for easy access.
 
 Just try it out for yourself, the usage of `httpdispatch` is very straightforward. The package is compact and minimalistic, but also probably one of the easiest routers to set up.
 
@@ -193,14 +185,14 @@ func Hello(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	// Initialize a dispatcher as usual
-	dispatcher := httpdispatch.New()
-	dispatcher.GET("/", Index)
-	dispatcher.GET("/hello/:name", Hello)
+	router := httpdispatch.New()
+	router.GET("/", http.HandlerFunc(Index))
+	router.GET("/hello/:name", http.HandlerFunc(Hello))
 
 	// Make a new DomainHandlers and insert the dispatcher (our http handler)
 	// for example.com and port 8080
 	dh := make(DomainHandlers)
-	dh["example.com:8080"] = dispatcher
+	dh["example.com:8080"] = router
 
 	// Use the DomainHandlers to listen and serve on port 8080
 	log.Fatal(http.ListenAndServe(":8080", dh))
@@ -226,31 +218,35 @@ import (
 )
 
 func BasicAuth(h httpdispatch.Handle, user, pass []byte) httpdispatch.Handle {
-	return func(w http.ResponseWriter, r *http.Request, ps httpdispatch.Params) {
-		const basicAuthPrefix string = "Basic "
+	return httpdispatch.NewContextHandle(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request, ps httpdispatch.Params) {
+				const basicAuthPrefix string = "Basic "
 
-		// Get the Basic Authentication credentials
-		auth := r.Header.Get("Authorization")
-		if strings.HasPrefix(auth, basicAuthPrefix) {
-			// Check credentials
-			payload, err := base64.StdEncoding.DecodeString(auth[len(basicAuthPrefix):])
-			if err == nil {
-				pair := bytes.SplitN(payload, []byte(":"), 2)
-				if len(pair) == 2 &&
-					bytes.Equal(pair[0], user) &&
-					bytes.Equal(pair[1], pass) {
+				// Get the Basic Authentication credentials
+				auth := r.Header.Get("Authorization")
+				if strings.HasPrefix(auth, basicAuthPrefix) {
+					// Check credentials
+					payload, err := base64.StdEncoding.DecodeString(auth[len(basicAuthPrefix):])
+					if err == nil {
+						pair := bytes.SplitN(payload, []byte(":"), 2)
+						if len(pair) == 2 &&
+							bytes.Equal(pair[0], user) &&
+							bytes.Equal(pair[1], pass) {
 
-					// Delegate request to the given handle
-					h(w, r, ps)
-					return
+							// Delegate request to the given handle
+							h(w, r, ps)
+							return
+						}
+					}
 				}
-			}
-		}
 
-		// Request Basic Authentication otherwise
-		w.Header().Set("WWW-Authenticate", "Basic realm=Restricted")
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-	}
+				// Request Basic Authentication otherwise
+				w.Header().Set("WWW-Authenticate", "Basic realm=Restricted")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			}
+		)
+	)
 }
 
 func Index(w http.ResponseWriter, r *http.Request) {
@@ -266,8 +262,8 @@ func main() {
 	pass := []byte("secret!")
 
 	router := httpdispatch.New()
-	router.GET("/", Index)
-	router.GET("/protected/", BasicAuth(Protected, user, pass))
+	router.GET("/", http.HandlerFunc(Index))
+	router.Handle(http.MethodGet, "/protected/", BasicAuth(Protected, user, pass))
 
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -290,9 +286,9 @@ router.NotFound = http.FileServer(http.Dir("public"))
 
 But this approach sidesteps the strict core rules of this router to avoid routing problems. A cleaner approach is to use a distinct sub-path for serving files, like `/static/*filepath` or `/files/*filepath`.
 
-## Web Frameworks build on httpdispatcher
+## Web Frameworks build on httpdispatch
 
-If the httpdispatcher is a bit too minimalistic for you, you might try one of the following more high-level 3rd-party web frameworks building upon the httpdispatcher package:
+If the httpdispatch is a bit too minimalistic for you, you might try one of the following more high-level 3rd-party web frameworks building upon the httpdispatch package:
 
 * [gogo](https://github.com/dolab/gogo): Modern Golang Web Framework
 

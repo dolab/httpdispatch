@@ -31,11 +31,11 @@ func (m *mockResponseWriter) WriteString(s string) (n int, err error) {
 
 func (m *mockResponseWriter) WriteHeader(int) {}
 
-type mockHandler struct {
+type fakeDispatcherHandler struct {
 	handeled bool
 }
 
-func (h mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h fakeDispatcherHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handeled = true
 }
 
@@ -64,9 +64,7 @@ func TestDispatcher(t *testing.T) {
 
 func BenchmarkDispatcher(b *testing.B) {
 	dispatcher := New()
-	dispatcher.Handle("GET", "/user/:name", func(w http.ResponseWriter, r *http.Request, ps Params) {
-		w.WriteHeader(http.StatusOK)
-	})
+	dispatcher.Handler("GET", "/user/:name", fakeDispatcherHandler{})
 
 	r, _ := http.NewRequest("GET", "/user/gopher", nil)
 	w := httptest.NewRecorder()
@@ -147,43 +145,43 @@ func TestDispatcherAPI(t *testing.T) {
 		{
 			http.MethodOptions,
 			"/options",
-			mockHandler{},
+			fakeDispatcherHandler{},
 			true,
 		},
 		{
 			http.MethodGet,
 			"/get",
-			mockHandler{},
+			fakeDispatcherHandler{},
 			true,
 		},
 		{
 			http.MethodPost,
 			"/post",
-			mockHandler{},
+			fakeDispatcherHandler{},
 			true,
 		},
 		{
 			http.MethodPut,
 			"/put",
-			mockHandler{},
+			fakeDispatcherHandler{},
 			true,
 		},
 		{
 			http.MethodPatch,
 			"/patch",
-			mockHandler{},
+			fakeDispatcherHandler{},
 			true,
 		},
 		{
 			http.MethodHead,
 			"/head",
-			mockHandler{},
+			fakeDispatcherHandler{},
 			true,
 		},
 		{
 			http.MethodDelete,
 			"/delete",
-			mockHandler{},
+			fakeDispatcherHandler{},
 			true,
 		},
 	}
@@ -568,7 +566,7 @@ func TestDispatcherLookup(t *testing.T) {
 	} else {
 		req, _ := http.NewRequest(http.MethodGet, "/user/gopher", nil)
 
-		handler(nil, req, nil)
+		handler.Handle(nil, req, nil)
 		if !routed {
 			t.Fatal("Routing failed!")
 		}
