@@ -30,7 +30,9 @@ func ContextParams(r *http.Request) Params {
 	}
 
 	var params Params
-	if err := gob.NewDecoder(bytes.NewBuffer(data)).Decode(&params); err != nil {
+
+	err := gob.NewDecoder(bytes.NewBuffer(data)).Decode(&params)
+	if err != nil {
 		return nil
 	}
 
@@ -39,9 +41,13 @@ func ContextParams(r *http.Request) Params {
 
 // Handle hijacks http.Handler with request params
 func (ch *ContextHandle) Handle(w http.ResponseWriter, r *http.Request, ps Params) {
-	buf := bytes.NewBuffer(nil)
-	if err := gob.NewEncoder(buf).Encode(ps); err == nil {
-		r.Header.Add(ctxParamHeaderKey, base64.RawURLEncoding.EncodeToString(buf.Bytes()))
+	if ch.useCtx && ps != nil {
+		buf := bytes.NewBuffer(nil)
+
+		err := gob.NewEncoder(buf).Encode(ps)
+		if err == nil {
+			r.Header.Add(ctxParamHeaderKey, base64.RawURLEncoding.EncodeToString(buf.Bytes()))
+		}
 	}
 
 	ch.handler.ServeHTTP(w, r)

@@ -24,11 +24,11 @@ func (_ *_fakeContextHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 func Test_ContextHandle(t *testing.T) {
-	assertion := assert.New(t)
+	it := assert.New(t)
 
-	ch := NewContextHandle(fakeContextHandler)
-	assertion.Implements((*Handler)(nil), ch)
-	assertion.NotNil(ch.Handle)
+	ch := NewContextHandle(fakeContextHandler, true)
+	it.Implements((*Handler)(nil), ch)
+	it.NotNil(ch.Handle)
 
 	r, _ := http.NewRequest(http.MethodGet, "", nil)
 	w := httptest.NewRecorder()
@@ -41,16 +41,16 @@ func Test_ContextHandle(t *testing.T) {
 
 	ch.Handle(w, r, ps)
 
-	assertion.Equal("key=value", w.Body.String())
+	it.Equal("key=value", w.Body.String())
 }
 
 func Test_FileHandle(t *testing.T) {
-	assertion := assert.New(t)
+	it := assert.New(t)
 	fs := http.Dir("./")
 
 	ch := NewFileHandle(fs)
-	assertion.Implements((*Handler)(nil), ch)
-	assertion.NotNil(ch.Handle)
+	it.Implements((*Handler)(nil), ch)
+	it.NotNil(ch.Handle)
 
 	r, _ := http.NewRequest(http.MethodGet, "", nil)
 	w := httptest.NewRecorder()
@@ -58,5 +58,5 @@ func Test_FileHandle(t *testing.T) {
 
 	ch.Handle(w, r, ps)
 
-	assertion.Contains(w.Body.String(), `<a href="LICENSE">LICENSE</a>`)
+	it.Contains(w.Body.String(), `<a href="LICENSE">LICENSE</a>`)
 }
