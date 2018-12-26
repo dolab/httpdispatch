@@ -1,6 +1,6 @@
 # httpdispatch
 
-[![Build Status](https://travis-ci.org/dolab/httpdispatch.svg?branch=master)](https://travis-ci.org/dolab/httpdispatch) [![Coverage](http://gocover.io/_badge/github.com/dolab/httpdispatch?0)](http://gocover.io/github.com/dolab/httpdispatch) [![GoDoc](https://godoc.org/github.com/dolab/httpdispatch?status.svg)](http://godoc.org/github.com/dolab/httpdispatch)
+[![CircleCI](https://circleci.com/gh/dolab/httpdispatch/tree/master.svg?style=svg)](https://circleci.com/gh/dolab/httpdispatch/tree/master) [![Coverage](http://gocover.io/_badge/github.com/dolab/httpdispatch?0)](http://gocover.io/github.com/dolab/httpdispatch) [![GoDoc](https://godoc.org/github.com/dolab/httpdispatch?status.svg)](http://godoc.org/github.com/dolab/httpdispatch)
 
 `httpdispatch` is a lightweight high performance HTTP request dispatcher (also called *multiplexer* or *mux* for short) for [Golang](https://golang.org/), which heavily inspired from [httprouter](https://github.com/julienschmidt/httprouter).
 
