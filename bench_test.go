@@ -623,6 +623,14 @@ func BenchmarkStaticDispatcher(b *testing.B) {
 	benchRoutes(b, dispatcher, staticRoutes)
 }
 
+func BenchmarkStaticDispatcherWithContext(b *testing.B) {
+	dispatcher := New()
+	dispatcher.RequestContext = true
+
+	loadRoutes(dispatcher, staticRoutes)
+	benchRoutes(b, dispatcher, staticRoutes)
+}
+
 func BenchmarkGithubTree(b *testing.B) {
 	dispatcher := New()
 	loadRoutes(dispatcher, githubRoutes)
@@ -631,6 +639,14 @@ func BenchmarkGithubTree(b *testing.B) {
 
 func BenchmarkGithubDispatcher(b *testing.B) {
 	dispatcher := New()
+	loadRoutes(dispatcher, githubRoutes)
+	benchRoutes(b, dispatcher, githubRoutes)
+}
+
+func BenchmarkGithubDispatcherWithContext(b *testing.B) {
+	dispatcher := New()
+	dispatcher.RequestContext = true
+
 	loadRoutes(dispatcher, githubRoutes)
 	benchRoutes(b, dispatcher, githubRoutes)
 }
@@ -647,6 +663,14 @@ func BenchmarkGplusDispatcher(b *testing.B) {
 	benchRoutes(b, dispatcher, gplusRoutes)
 }
 
+func BenchmarkGplusDispatcherWithContext(b *testing.B) {
+	dispatcher := New()
+	dispatcher.RequestContext = true
+
+	loadRoutes(dispatcher, gplusRoutes)
+	benchRoutes(b, dispatcher, gplusRoutes)
+}
+
 func BenchmarkParseTree(b *testing.B) {
 	dispatcher := New()
 	loadRoutes(dispatcher, parseRoutes)
@@ -655,6 +679,14 @@ func BenchmarkParseTree(b *testing.B) {
 
 func BenchmarkParseDispatcher(b *testing.B) {
 	dispatcher := New()
+	loadRoutes(dispatcher, parseRoutes)
+	benchRoutes(b, dispatcher, parseRoutes)
+}
+
+func BenchmarkParseDispatcherWithContext(b *testing.B) {
+	dispatcher := New()
+	dispatcher.RequestContext = true
+
 	loadRoutes(dispatcher, parseRoutes)
 	benchRoutes(b, dispatcher, parseRoutes)
 }
