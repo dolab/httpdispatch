@@ -19,7 +19,11 @@ func ContextParams(r *http.Request) Params {
 
 // Handle hijacks http.Handler with request params
 func (ch *ContextHandle) Handle(w http.ResponseWriter, r *http.Request, ps Params) {
-	ctx := context.WithValue(r.Context(), ctxParamKey, ps)
+	if ch.useCtx && ps != nil {
+		ctx := context.WithValue(r.Context(), ctxParamKey, ps)
 
-	ch.handler.ServeHTTP(w, r.WithContext(ctx))
+		r = r.WithContext(ctx)
+	}
+
+	ch.handler.ServeHTTP(w, r)
 }

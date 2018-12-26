@@ -26,7 +26,7 @@ func (_ *_fakeContextHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 func Test_ContextHandle(t *testing.T) {
 	assertion := assert.New(t)
 
-	ch := NewContextHandle(fakeContextHandler)
+	ch := NewContextHandle(fakeContextHandler, true)
 	assertion.Implements((*Handler)(nil), ch)
 	assertion.NotNil(ch.Handle)
 

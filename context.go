@@ -14,12 +14,14 @@ type ctxParam struct{}
 // such as package name, controller name and action name of handle.
 type ContextHandle struct {
 	handler http.Handler
+	useCtx  bool
 }
 
 // NewContextHandle returns *ContextHandle with handler info
-func NewContextHandle(handler http.Handler) *ContextHandle {
+func NewContextHandle(handler http.Handler, useContext bool) *ContextHandle {
 	return &ContextHandle{
 		handler: handler,
+		useCtx:  useContext,
 	}
 }
 
@@ -31,7 +33,7 @@ type FileHandle struct {
 // NewFileHandle returns *FileHandle with passed http.HandlerFunc
 func NewFileHandle(fs http.FileSystem) *FileHandle {
 	return &FileHandle{
-		ContextHandle: NewContextHandle(http.FileServer(fs)),
+		ContextHandle: NewContextHandle(http.FileServer(fs), false),
 	}
 }
 

@@ -95,6 +95,9 @@ type Handler interface {
 type Dispatcher struct {
 	trees map[string]*node
 
+	// If enabled, the router tries to inject parsed params within http.Request.
+	RequestContext bool
+
 	// Enables automatic redirection if the current route can't be matched but a
 	// handler for the path with (without) the trailing slash exists.
 	// For example if /foo/ is requested but a route only exists for /foo, the
@@ -196,7 +199,7 @@ func (d *Dispatcher) DELETE(path string, handler http.Handler) {
 // Handler is an adapter which allows the usage of a http.Handler as a
 // request handle.
 func (d *Dispatcher) Handler(method, path string, handler http.Handler) {
-	d.Handle(method, path, NewContextHandle(handler))
+	d.Handle(method, path, NewContextHandle(handler, d.RequestContext))
 }
 
 // HandlerFunc is an adapter which allows the usage of an http.HandlerFunc as a
@@ -239,43 +242,43 @@ func (d *Dispatcher) Lookup(method, path string) (Handler, Params, bool) {
 }
 
 // ServeHTTP makes the router implement the http.Handler interface.
-func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if d.PanicHandler != nil {
-		defer d.recovery(w, req)
+		defer d.recovery(w, r)
 	}
 
-	path := req.URL.Path
+	path := r.URL.Path
 
-	if root := d.trees[req.Method]; root != nil {
+	if root := d.trees[r.Method]; root != nil {
 		handler, params, tsr := root.getValue(path)
 
 		if handler != nil {
 			if !tsr || !d.RedirectTrailingSlash {
-				handler.Handle(w, req, params)
+				handler.Handle(w, r, params)
 				return
 			}
 
 			// Permanent redirect, request with GET method
 			code := http.StatusMovedPermanently
-			if req.Method != http.MethodGet {
+			if r.Method != http.MethodGet {
 				// Temporary redirect, request with same method
 				// As of Go 1.3, Go does not support status code 308.
 				code = http.StatusTemporaryRedirect
 			}
 
 			if len(path) > 1 && path[len(path)-1] == '/' {
-				req.URL.Path = path[:len(path)-1]
+				r.URL.Path = path[:len(path)-1]
 			} else {
-				req.URL.Path = path + "/"
+				r.URL.Path = path + "/"
 			}
 
 			// redirect trailing slash pattern
-			http.Redirect(w, req, req.URL.String(), code)
+			http.Redirect(w, r, r.URL.String(), code)
 			return
 		}
 
 		// Try to fix the request path
-		if d.RedirectFixedPath && req.Method != http.MethodConnect && path != "/" {
+		if d.RedirectFixedPath && r.Method != http.MethodConnect && path != "/" {
 			fixedPath, found := root.findCaseInsensitivePath(
 				Normalize(path),
 				d.RedirectTrailingSlash,
@@ -283,24 +286,24 @@ func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if found {
 				// Permanent redirect, request with GET method
 				code := http.StatusMovedPermanently
-				if req.Method != http.MethodGet {
+				if r.Method != http.MethodGet {
 					// Temporary redirect, request with same method
 					// As of Go 1.3, Go does not support status code 308.
 					code = http.StatusTemporaryRedirect
 				}
 
-				req.URL.Path = string(fixedPath)
+				r.URL.Path = string(fixedPath)
 
-				http.Redirect(w, req, req.URL.String(), code)
+				http.Redirect(w, r, r.URL.String(), code)
 				return
 			}
 		}
 	}
 
-	if req.Method == http.MethodOptions {
+	if r.Method == http.MethodOptions {
 		// Handle OPTIONS
 		if d.HandleMethodOPTIONS {
-			allow := d.allowed(path, req.Method)
+			allow := d.allowed(path, r.Method)
 			if len(allow) > 0 {
 				w.Header().Set("Allow", allow)
 				return
@@ -309,12 +312,12 @@ func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else {
 		// Handle 405
 		if d.HandleMethodNotAllowed {
-			allow := d.allowed(path, req.Method)
+			allow := d.allowed(path, r.Method)
 			if len(allow) > 0 {
 				w.Header().Set("Allow", allow)
 
 				if d.MethodNotAllowed != nil {
-					d.MethodNotAllowed.ServeHTTP(w, req)
+					d.MethodNotAllowed.ServeHTTP(w, r)
 				} else {
 					http.Error(w,
 						http.StatusText(http.StatusMethodNotAllowed),
@@ -327,7 +330,7 @@ func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Handle 404
-	d.notfound(w, req)
+	d.notfound(w, r)
 }
 
 // Handle registers a new request handler with the given path and method.

@@ -44,6 +44,8 @@ func TestDispatcher(t *testing.T) {
 	want := Params{Param{"name", "gopher"}}
 
 	dispatcher := New()
+	dispatcher.RequestContext = true
+
 	dispatcher.HandlerFunc("GET", "/user/:name", func(w http.ResponseWriter, r *http.Request) {
 		routed = true
 
@@ -62,17 +64,6 @@ func TestDispatcher(t *testing.T) {
 	}
 }
 
-func BenchmarkDispatcher(b *testing.B) {
-	dispatcher := New()
-	dispatcher.Handler("GET", "/user/:name", fakeDispatcherHandler{})
-
-	r, _ := http.NewRequest("GET", "/user/gopher", nil)
-	w := httptest.NewRecorder()
-	for i := 0; i < b.N; i++ {
-		dispatcher.ServeHTTP(w, r)
-	}
-}
-
 func TestDispatcherWithContext(t *testing.T) {
 	var (
 		routedForNamed = false
@@ -83,6 +74,8 @@ func TestDispatcherWithContext(t *testing.T) {
 	)
 
 	dispatcher := New()
+	dispatcher.RequestContext = true
+
 	dispatcher.HandlerFunc("GET", "/user/:name", func(w http.ResponseWriter, r *http.Request) {
 		routedForNamed = true
 
@@ -114,22 +107,6 @@ func TestDispatcherWithContext(t *testing.T) {
 
 	if !routedForWildcard {
 		t.Fatal("routing failed")
-	}
-}
-
-func BenchmarkDispatcherWithContext(b *testing.B) {
-	dispatcher := New()
-	dispatcher.HandlerFunc("GET", "/user/:name", func(w http.ResponseWriter, r *http.Request) {
-		params := ContextParams(r)
-		_ = params.ByName("name")
-
-		w.WriteHeader(http.StatusOK)
-	})
-
-	r, _ := http.NewRequest("GET", "/user/gopher", nil)
-	w := httptest.NewRecorder()
-	for i := 0; i < b.N; i++ {
-		dispatcher.ServeHTTP(w, r)
 	}
 }
 
