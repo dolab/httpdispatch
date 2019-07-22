@@ -322,7 +322,6 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 // given path.
 // It returns handle also if a TSR is true. Its useful for quick fallback strategy.
 func (n *node) getValue(path string) (handle Handler, p Params, tsr bool, route string) {
-	route = "/"
 walk: // outer loop for walking the tree
 	for {
 		switch {
