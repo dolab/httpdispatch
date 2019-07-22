@@ -321,7 +321,8 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 // made if a handle exists with an extra (without the) trailing slash for the
 // given path.
 // It returns handle also if a TSR is true. Its useful for quick fallback strategy.
-func (n *node) getValue(path string) (handle Handler, p Params, tsr bool) {
+func (n *node) getValue(path string) (handle Handler, p Params, tsr bool, route string) {
+	route = "/"
 walk: // outer loop for walking the tree
 	for {
 		switch {
@@ -345,6 +346,7 @@ walk: // outer loop for walking the tree
 					for i := 0; i < len(n.indices); i++ {
 						if c == n.indices[i] {
 							n = n.children[i]
+							route += n.path
 							continue walk
 						}
 					}
@@ -354,6 +356,8 @@ walk: // outer loop for walking the tree
 
 				// handle wildcard child
 				n = n.children[0]
+				route += n.path
+
 				switch n.typo {
 				case param:
 					// save param value
@@ -387,6 +391,7 @@ walk: // outer loop for walking the tree
 						if len(n.children) > 0 {
 							path = path[end:]
 							n = n.children[0]
+							route += n.path
 
 							continue walk
 						}
@@ -404,6 +409,7 @@ walk: // outer loop for walking the tree
 					// trailing slash exists for TSR recommendation
 					if len(n.children) == 1 {
 						n = n.children[0]
+						route += n.path
 
 						tsr = (n.path == "/" && n.handle != nil)
 						if tsr {
@@ -457,6 +463,7 @@ walk: // outer loop for walking the tree
 			for i := 0; i < len(n.indices); i++ {
 				if n.indices[i] == '/' {
 					n = n.children[i]
+					route += n.path
 
 					tsr = (len(n.path) == 1 && n.handle != nil)
 					if tsr {

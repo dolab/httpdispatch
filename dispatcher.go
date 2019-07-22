@@ -80,7 +80,14 @@
 package httpdispatch
 
 import (
+	"context"
 	"net/http"
+)
+
+type ContextKey int
+
+const (
+	ContextKeyRoute ContextKey = iota
 )
 
 // Handler is an interface that can be registered to a route to handle HTTP
@@ -235,7 +242,8 @@ func (d *Dispatcher) ServeFiles(path string, fs http.FileSystem) {
 // the same path with / without the trailing slash should be performed.
 func (d *Dispatcher) Lookup(method, path string) (Handler, Params, bool) {
 	if root := d.trees[method]; root != nil {
-		return root.getValue(path)
+		handler, params, tsr, _ := root.getValue(path)
+		return handler, params, tsr
 	}
 
 	return nil, nil, false
@@ -250,10 +258,11 @@ func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
 	if root := d.trees[r.Method]; root != nil {
-		handler, params, tsr := root.getValue(path)
+		handler, params, tsr, route := root.getValue(path)
 
 		if handler != nil {
 			if !tsr || !d.RedirectTrailingSlash {
+				r = r.WithContext(context.WithValue(r.Context(), ContextKeyRoute, route))
 				handler.Handle(w, r, params)
 				return
 			}
@@ -382,7 +391,7 @@ func (d *Dispatcher) allowed(path, reqMethod string) (allow string) {
 				continue
 			}
 
-			handler, _, _ := d.trees[method].getValue(path)
+			handler, _, _, _ := d.trees[method].getValue(path)
 			if handler != nil {
 				// add request method to list of allowed methods
 				if len(allow) == 0 {
