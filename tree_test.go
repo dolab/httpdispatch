@@ -42,7 +42,7 @@ type testRequests []struct {
 
 func checkRequests(t *testing.T, tree *node, requests testRequests) {
 	for _, request := range requests {
-		handler, ps, tsr := tree.getValue(request.path)
+		handler, ps, tsr, _ := tree.getValue(request.path)
 
 		if tsr {
 			if handler != nil {
@@ -470,7 +470,7 @@ func TestTreeTrailingSlashRedirect(t *testing.T) {
 		"/doc/",
 	}
 	for _, route := range tsrRoutes {
-		handler, _, tsr := tree.getValue(route)
+		handler, _, tsr, _ := tree.getValue(route)
 		if handler != nil && !tsr {
 			t.Fatalf("non-nil handler for TSR route '%s", route)
 		} else if !tsr {
@@ -487,7 +487,7 @@ func TestTreeTrailingSlashRedirect(t *testing.T) {
 		"/api/world/abc",
 	}
 	for _, route := range noTsrRoutes {
-		handler, _, tsr := tree.getValue(route)
+		handler, _, tsr, _ := tree.getValue(route)
 		if handler != nil {
 			t.Fatalf("non-nil handler for No-TSR route '%s", route)
 		} else if tsr {
@@ -506,7 +506,7 @@ func TestTreeRootTrailingSlashRedirect(t *testing.T) {
 		t.Fatalf("panic inserting test route: %v", recv)
 	}
 
-	handler, _, tsr := tree.getValue("/")
+	handler, _, tsr, _ := tree.getValue("/")
 	if handler != nil {
 		t.Fatalf("non-nil handler")
 	} else if tsr {
