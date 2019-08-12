@@ -275,7 +275,7 @@ func TestDispatcherOPTIONS(t *testing.T) {
 		t.Errorf("OPTIONS handling failed: Code=%d, Header=%v", w.Code, w.Header())
 	}
 
-	// add another method
+	// register another method
 	dispatcher.HandlerFunc(http.MethodGet, "/path", handlerFunc)
 
 	// test again
@@ -366,7 +366,7 @@ func TestDispatcherNotAllowed(t *testing.T) {
 		t.Errorf("NotAllowed handling failed: Code=%d, Header=%v", w.Code, w.Header())
 	}
 
-	// add another method
+	// register another method
 	dispatcher.HandlerFunc(http.MethodDelete, "/path", handlerFunc)
 	dispatcher.HandlerFunc(http.MethodOptions, "/path", handlerFunc) // must be ignored
 

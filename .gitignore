@@ -7,9 +7,10 @@
 # Folders
 _obj
 _test
-bin
-pkg
-src
+/bin
+/pkg
+/src
+.idea
 
 # Architecture specific extensions/prefixes
 *.[568vq]

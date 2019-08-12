@@ -22,7 +22,7 @@ func (ch *ContextHandle) Handle(w http.ResponseWriter, r *http.Request, ps Param
 	if ch.useCtx && ps != nil {
 		ctx := context.WithValue(r.Context(), ctxParamKey, ps)
 
-		r = r.WithContext(ctx)
+		*r = *r.WithContext(ctx)
 	}
 
 	ch.handler.ServeHTTP(w, r)
