@@ -62,3 +62,25 @@ func Test_FileHandle(t *testing.T) {
 
 	it.Contains(w.Body.String(), `<a href="LICENSE">LICENSE</a>`)
 }
+
+func BenchmarkContextHandle_Handle(b *testing.B) {
+	ch := NewContextHandle(fakeContextHandler, true)
+
+	ps := Params{
+		Param{
+			Key:   "key",
+			Value: "value",
+		},
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			r, _ := http.NewRequest(http.MethodGet, "", nil)
+			w := httptest.NewRecorder()
+
+			ch.Handle(w, r, ps)
+		}
+	})
+}

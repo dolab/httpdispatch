@@ -507,110 +507,108 @@ type Route struct {
 	Path   string
 }
 
-func newHandler(method, path string) http.Handler {
+func newHandler(method, uripath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		// w.Write([]byte("OK"))
 	})
 }
 
-func loadRoutes(dispather *Dispatcher, routes []*Route) {
+func loadRoutes(dispatcher *Dispatcher, routes []*Route) {
 	for _, r := range routes {
 		switch r.Method {
 		case "GET":
-			dispather.GET(r.Path, newHandler(r.Method, r.Path))
+			dispatcher.GET(r.Path, newHandler(r.Method, r.Path))
 		case "POST":
-			dispather.POST(r.Path, newHandler(r.Method, r.Path))
+			dispatcher.POST(r.Path, newHandler(r.Method, r.Path))
 		case "PATCH":
-			dispather.PATCH(r.Path, newHandler(r.Method, r.Path))
+			dispatcher.PATCH(r.Path, newHandler(r.Method, r.Path))
 		case "PUT":
-			dispather.PUT(r.Path, newHandler(r.Method, r.Path))
+			dispatcher.PUT(r.Path, newHandler(r.Method, r.Path))
 		case "DELETE":
-			dispather.DELETE(r.Path, newHandler(r.Method, r.Path))
-		}
-	}
-}
-
-func benchRoutes(b *testing.B, router http.Handler, routes []*Route) {
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	r := httptest.NewRequest("GET", "/", nil)
-	u := r.URL
-	w := httptest.NewRecorder()
-
-	for i := 0; i < b.N; i++ {
-		for _, route := range routes {
-			r.Method = route.Method
-			u.Path = route.Path
-
-			router.ServeHTTP(w, r)
-
-			if w.Code != http.StatusOK {
-				b.Fatalf("%#v: %d", route.Method, w.Code)
-			}
+			dispatcher.DELETE(r.Path, newHandler(r.Method, r.Path))
 		}
 	}
 }
 
 func benchTrees(b *testing.B, trees map[string]*node, routes []*Route) {
-	b.ReportAllocs()
 	b.ResetTimer()
+	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
-		for _, route := range routes {
-			trees[route.Method].getValue(route.Path)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for _, route := range routes {
+				h, _, _ := trees[route.Method].resolve(route.Path)
+				if h == nil {
+					b.Fatalf("%s %s: %v", route.Method, route.Path, h)
+				}
+			}
 		}
-	}
+	})
+}
+
+func benchRoutes(b *testing.B, router http.Handler, routes []*Route) {
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for _, route := range routes {
+			for pb.Next() {
+				r := httptest.NewRequest(route.Method, route.Path, nil)
+				w := httptest.NewRecorder()
+
+				router.ServeHTTP(w, r)
+
+				if w.Code != http.StatusOK {
+					b.Fatalf("%#v: %d", route.Method, w.Code)
+				}
+			}
+		}
+	})
 }
 
 func BenchmarkDispatcher(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-
 	dispatcher := New()
 	dispatcher.HandlerFunc("GET", "/user/:name", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	r, _ := http.NewRequest("GET", "/user/gopher", nil)
-	w := httptest.NewRecorder()
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			r, _ := http.NewRequest("GET", "/user/gopher", nil)
+			w := httptest.NewRecorder()
 
-	for i := 0; i < b.N; i++ {
-		dispatcher.ServeHTTP(w, r)
+			dispatcher.ServeHTTP(w, r)
 
-		if w.Code != http.StatusOK {
-			b.Fatal(w.Code)
+			if w.Code != http.StatusOK {
+				b.Fatal(w.Code)
+			}
 		}
-	}
+	})
 }
 
 func BenchmarkDispatcherWithContext(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-
 	dispatcher := New()
 	dispatcher.RequestContext = true
 
 	dispatcher.HandlerFunc("GET", "/user/:name", func(w http.ResponseWriter, r *http.Request) {
-		params := ContextParams(r)
-		if params.ByName("name") == "gopher" {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+		w.WriteHeader(http.StatusOK)
 	})
 
-	r, _ := http.NewRequest("GET", "/user/gopher", nil)
-	w := httptest.NewRecorder()
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			r, _ := http.NewRequest("GET", "/user/gopher", nil)
+			w := httptest.NewRecorder()
 
-	for i := 0; i < b.N; i++ {
-		dispatcher.ServeHTTP(w, r)
+			dispatcher.ServeHTTP(w, r)
 
-		if w.Code != http.StatusOK {
-			b.Fatal(w.Code)
+			if w.Code != http.StatusOK {
+				b.Fatal(w.Code)
+			}
 		}
-	}
+	})
 }
 
 func BenchmarkStaticTree(b *testing.B) {

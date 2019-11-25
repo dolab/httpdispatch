@@ -40,6 +40,7 @@ func NewFileHandle(fs http.FileSystem) *FileHandle {
 // Handle hijacks request path with filepath by overwrite
 func (fh *FileHandle) Handle(w http.ResponseWriter, r *http.Request, ps Params) {
 	r.URL.Path = ps.ByName("filepath")
+	r.RequestURI = r.URL.String()
 
 	fh.handler.ServeHTTP(w, r)
 }

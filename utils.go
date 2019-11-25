@@ -128,3 +128,41 @@ func bcopy(buf *[]byte, s string, w int, c byte) {
 	}
 	(*buf)[w] = c
 }
+
+func min(a, b int) int {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
+func countParams(uripath string) uint8 {
+	var n uint
+	for i := 0; i < len(uripath); i++ {
+		if uripath[i] != ':' && uripath[i] != '*' {
+			continue
+		}
+
+		n++
+	}
+	if n >= 255 {
+		return 255
+	}
+	return uint8(n)
+}
+
+// shift bytes in array by n bytes left
+func shiftNRuneBytes(rb [4]byte, n int) [4]byte {
+	switch n {
+	case 0:
+		return rb
+	case 1:
+		return [4]byte{rb[1], rb[2], rb[3], 0}
+	case 2:
+		return [4]byte{rb[2], rb[3]}
+	case 3:
+		return [4]byte{rb[3]}
+	default:
+		return [4]byte{}
+	}
+}
